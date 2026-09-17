@@ -42,7 +42,7 @@ Participant-level KNHANES and NHANES data are not redistributed. The public repo
 
 ## Citation and archival
 
-Use the metadata in [CITATION.cff](CITATION.cff) when citing the software/reproducibility archive. The exact v1.0.0 release will be archived with Zenodo; once the DOI is minted, the DOI will be added to the repository metadata and manuscript without changing the archived analysis results.
+Use the metadata in CITATION.cff when citing the software/reproducibility archive. The exact v1.0.0 release used for this study has been permanently archived in Zenodo (DOI: 10.5281/zenodo.22804046). The archived code, model objects, aggregate results, and verification resources correspond to the locked analysis version.
 
 ## License
 
