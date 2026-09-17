@@ -4,7 +4,7 @@ Reproducibility resources for the study of multidimensional calibration and tran
 
 **Repository:** https://github.com/xukaifs/hgs-transportability  
 **Release:** v1.0.0 (2026-09-17)  
-**Zenodo DOI:** to be added after archival of the GitHub v1.0.0 release.
+**Zenodo DOI:** 10.5281/zenodo.22804046
 
 **Authors:** Xiaoqing Sun; Taoyang Han; Kai Xu (corresponding author). Full affiliations, contact information and ORCID iDs are in [AUTHORS.md](AUTHORS.md). Citation metadata are in [CITATION.cff](CITATION.cff).
 
