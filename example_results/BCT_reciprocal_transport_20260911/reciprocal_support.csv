@@ -1,0 +1,5 @@
+"direction","sex","N","source_height_min","source_height_max","source_height_p01","source_height_p99","age_outside","height_below_min","height_above_max","height_below_p01","height_above_p99"
+"US to Korea","Female",17943,135.3,185.7,145.8,178.7,0,10,1,548,6
+"US to Korea","Male",14368,146.6,204.5,158.2,193.7,0,6,0,438,3
+"Korea to US","Female",4718,126.1,186.8,143.2,173,0,0,0,22,220
+"Korea to US","Male",4616,128.8,195,156,186.7,0,0,20,42,267

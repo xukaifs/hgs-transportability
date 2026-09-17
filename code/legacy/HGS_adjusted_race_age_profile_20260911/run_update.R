@@ -1,0 +1,55 @@
+invisible(Sys.setlocale('LC_ALL','English_United States.utf8'))
+root<-getwd();base<-dirname(root);source(file.path(base,'KNHANES_HGS_phase2_20260910','core.R'));suppressPackageStartupMessages(library(haven))
+wc<-function(x,n)write.csv(x,paste0(n,'.csv'),row.names=FALSE,na='',fileEncoding='UTF-8')
+phase<-file.path(base,'KNHANES_HGS_phase2_20260910');ladder<-file.path(base,'US_BCT_recalibration_ladder_20260910');simple<-file.path(base,'US_simple_methods_ladder_20260910')
+inputs<-c(file.path(phase,'temporal_scores.rds'),file.path(ladder,'heldout_scores.rds'),file.path(simple,'simple_heldout_scores.rds'))
+hashes<-unname(tools::md5sum(inputs));ks<-readRDS(inputs[1]);bs<-readRDS(inputs[2]);ss<-readRDS(inputs[3]);bs$normalization<-'BCT';uscores<-rbind(ss,bs[,names(ss)])
+kr<-readRDS(file.path(base,'KNHANES_HGS_pilot_20260909','validation_data.rds'))
+us<-readRDS(file.path(base,'HGS_pilot_20260908','harmonized_raw_qc.rds'));us<-subset(us,cycle=='H');us$height10<-us$height/10;us$strata_pool<-factor(us$SDMVSTRA);us$psu_pool<-interaction(us$SDMVSTRA,us$SDMVPSU,drop=TRUE);us$design_ok<-is.finite(us$weight)&us$weight>0&!is.na(us$strata_pool)&!is.na(us$psu_pool)
+# Official NHANES RIDRETH3: 1/2 Hispanic, 3 NH White, 4 NH Black, 6 NH Asian, 7 Other including multiracial.
+demo<-read_xpt('D:/DXA身体成分分析/数据/人口学/DEMO_H.xpt');stopifnot(!anyDuplicated(demo$SEQN));ix<-match(us$SEQN,demo$SEQN);stopifnot(!anyNA(ix),all(us$age==demo$RIDAGEYR[ix]),all(us$height>0|!us$eligible,na.rm=TRUE))
+us$race_code<-as.numeric(demo$RIDRETH3[ix]);race_map<-c('1'='Hispanic','2'='Hispanic','3'='Non-Hispanic White','4'='Non-Hispanic Black','6'='Non-Hispanic Asian','7'='Other / multiracial');us$race<-unname(race_map[as.character(us$race_code)]);stopifnot(!anyNA(subset(us,eligible)$race))
+wc(data.frame(code=names(race_map),group=unname(race_map)),'race_code_mapping')
+getdes<-function(full,score,idcol){stopifnot(!anyDuplicated(score[[idcol]]));ii<-match(score[[idcol]],full[[idcol]]);stopifnot(!anyNA(ii));full$z<-NA_real_;full$z[ii]<-score$z;full$age10<-full$age/10;full$age_c<-(full$age-50)/10;full$height_c<-(full$height-165)/10;full$age_group<-cut(full$age,c(20,40,60,80),right=FALSE,labels=c('20-39','40-59','60-79'));full$p10<-as.numeric(full$z< -1.282);full$p5<-as.numeric(full$z< -1.645)
+ de<-svydesign(ids=~psu_pool,strata=~strata_pool,weights=~weight,data=subset(full,design_ok),nest=TRUE);subset(de,!is.na(z))}
+stat<-function(de){d<-de$variables;meanfit<-svymean(~z,de);ci<-confint(meanfit);data.frame(N=nrow(d),mean_z=weighted.mean(d$z,d$weight),mean_ci_low=ci[1],mean_ci_high=ci[2],sd_z=wsd(d$z,d$weight),p10=100*weighted.mean(d$p10,d$weight),p5=100*weighted.mean(d$p5,d$weight),p10_events=sum(d$p10),p5_events=sum(d$p5))}
+adjusted<-list()
+for(s in c('Female','Male'))for(m in c('BCT','Height2','Allometry_ageadj'))for(cal in c('Frozen','Location_scale')){
+ sc<-subset(uscores,sex==s&normalization==m&method==cal);de<-getdes(us,sc,'SEQN');de$variables$race<-factor(de$variables$race,levels=c('Non-Hispanic Asian','Non-Hispanic White','Non-Hispanic Black','Hispanic','Other / multiracial'))
+ fit<-svyglm(z~race+ns(age,4)+ns(height,3),de);d<-de$variables;w<-d$weight/sum(d$weight);cf<-coef(fit);V<-vcov(fit);critical<-qt(.975,df=fit$df.residual)
+ for(gr in levels(d$race)){
+ nd<-d;nd$race<-factor(gr,levels=levels(d$race));X<-model.matrix(delete.response(terms(fit)),nd,contrasts.arg=fit$contrasts);L<-colSums(X*w);est<-sum(L*cf);se<-sqrt(as.numeric(t(L)%*%V%*%L));raw<-stat(subset(de,race==gr))
+ adjusted[[paste(s,m,cal,gr)]]<-data.frame(sex=s,normalization=m,calibration=cal,race=gr,N=raw$N,raw_mean_z=raw$mean_z,adjusted_mean_z=est,SE=se,ci_low=est-critical*se,ci_high=est+critical*se,adjustment_change=est-raw$mean_z,target_N=nrow(d),residual_df=fit$df.residual)
+ }
+}
+ar<-do.call(rbind,adjusted);wc(ar,'race_age_height_adjusted_means');cat('ADJUSTED RACE COMPLETE\n');print(subset(ar,normalization=='BCT'&calibration=='Location_scale')[,c('sex','race','raw_mean_z','adjusted_mean_z','ci_low','ci_high')],row.names=FALSE);flush.console()
+# Extend existing profile with age; recompute only OOF age diagnostics from saved scores.
+pf<-read.csv(file.path(base,'HGS_performance_profile_20260911','performance_profile.csv'));dev<-subset(readRDS(file.path(base,'KNHANES_HGS_pilot_20260909','development_data.rds')),eligible)
+ao<-read.csv(file.path(base,'HGS_age_race_transport_20260911','age_transport_overall.csv'));ag<-read.csv(file.path(base,'HGS_age_race_transport_20260911','age_transport_groups.csv'));oo<-list()
+pf$abs_age_slope_per10y<-NA_real_;pf$p10_age_range_pp<-NA_real_;pf$p5_age_range_pp<-NA_real_
+for(i in seq_len(nrow(pf))){s<-pf$sex[i];m<-pf$method[i];scenario<-pf$scenario[i]
+ if(scenario=='A'){
+  id<-if(m=='BCT')'BCT_M1_S2'else m;r<-readRDS(file.path(phase,'candidates',paste0(s,'_',id,'.rds')));d<-subset(dev,sex==s);vals<-list()
+  for(rr in 1:2){sc<-subset(r$oof,repeat_id==rr);ix<-match(d$uid,sc$uid);stopifnot(!anyNA(ix));z<-sc$z[ix];w<-d$weight;age<-d$age/10;sl<-sum(w*(age-weighted.mean(age,w))*(z-weighted.mean(z,w)))/sum(w*(age-weighted.mean(age,w))^2);g<-cut(d$age,c(20,40,60,80),right=FALSE);p10<-tapply(seq_len(nrow(d)),g,function(j)100*weighted.mean(z[j]< -1.282,w[j]));p5<-tapply(seq_len(nrow(d)),g,function(j)100*weighted.mean(z[j]< -1.645,w[j]));vals[[rr]]<-data.frame(sex=s,method=m,repeat_id=rr,abs_age_slope_per10y=abs(sl),p10_age_range_pp=diff(range(p10)),p5_age_range_pp=diff(range(p5)))}
+  vv<-do.call(rbind,vals);oo[[paste(s,m)]]<-vv;pf[i,c('abs_age_slope_per10y','p10_age_range_pp','p5_age_range_pp')]<-as.list(colMeans(vv[,4:6]))
+ }else{
+  setting<-if(scenario=='B')'Korea_temporal'else'US_heldout';cal<-if(scenario=='B')'Frozen'else'Location_scale';a<-subset(ao,scenario==setting&sex==s&normalization==m&calibration==cal);g<-subset(ag,scenario==setting&sex==s&normalization==m&calibration==cal);stopifnot(nrow(a)==1,nrow(g)==3);pf$abs_age_slope_per10y[i]<-abs(a$age_slope_per10y);pf$p10_age_range_pp[i]<-diff(range(g$p10));pf$p5_age_range_pp[i]<-diff(range(g$p5))
+ }
+}
+wc(pf,'performance_profile_with_age');wc(do.call(rbind,oo),'OOF_age_repeat_metrics')
+metrics<-c('abs_mean_z','abs_sd_minus1','abs_age_slope_per10y','abs_slope_per10cm','abs_p10_minus10_pp','abs_p5_minus5_pp','p10_age_range_pp','p10_height_range_pp','p5_height_range_pp')
+l<-do.call(rbind,lapply(metrics,function(nm)data.frame(pf[,c('sex','scenario','method')],metric=nm,value=pf[[nm]])));l$metric<-factor(l$metric,levels=metrics);mx<-tapply(l$value,l$metric,max);l$intensity<-l$value/as.numeric(mx[as.character(l$metric)]);l$display<-ifelse(l$metric %in% metrics[1:4],sprintf('%.3f',l$value),sprintf('%.2f',l$value));l$display[l$metric %in% metrics[1:4]&l$value>0&l$value<.0005]<-'<0.001'
+ml<-c(Height2='Height squared',Allometry_ageadj='Age-adjusted allometry',BCT='BCT');l$row<-paste(l$scenario,ml[l$method],sep=' | ');l$row<-factor(l$row,levels=rev(unlist(lapply(c('A','B','C'),function(s)paste(s,ml,sep=' | ')))))
+labels<-c('|mean Z|','|SD - 1|','|age slope|\nZ / 10 y','|height slope|\nZ / 10 cm','|P10 - 10%|\npp','|P5 - 5%|\npp','P10 age\nrange (pp)','P10 height\nrange (pp)','P5 height\nrange (pp)')
+p<-ggplot(l,aes(metric,row,fill=intensity))+geom_tile(color='white')+geom_text(aes(label=display,color=intensity>.58),size=3.5,show.legend=FALSE)+scale_color_manual(values=c('FALSE'='#172A3A','TRUE'='white'))+scale_fill_gradient(low='#F2F6FA',high='#125384',name='Within-metric\nrelative magnitude',limits=c(0,1))+scale_x_discrete(labels=labels,position='top')+facet_wrap(~sex,ncol=1)+theme_minimal(base_size=11)+theme(panel.grid=element_blank(),axis.title=element_blank(),plot.caption=element_text(hjust=0),strip.text=element_text(face='bold'))+labs(title='Handgrip normalization: performance profile including age',subtitle='A: Korean OOF | B: Korean temporal | C: US held-out after location + scale adaptation',caption='A/B references: Korea 2014-2016. C reference: pooled Korea 2014-2019; adaptation US 2011-2012; evaluation US 2013-2014.\nAge groups: 20-39, 40-59, 60-79. Smaller values are closer to targets. Color scaled separately per metric; no composite score.\nA averages repeat-specific absolute deviations/ranges. C uses the same calibration level for all methods. P5 age range is in the CSV supplement.')
+ggsave('performance_profile_with_age.png',p,width=16,height=10,dpi=220,bg='white');ggsave('performance_profile_with_age.pdf',p,width=16,height=10,bg='white');wc(l,'heatmap_data')
+b<-subset(ar,normalization=='BCT');p<-ggplot(b,aes(adjusted_mean_z,race,color=calibration))+geom_vline(xintercept=0,linetype=2)+geom_point(position=position_dodge(width=.4))+geom_errorbar(aes(xmin=ci_low,xmax=ci_high),position=position_dodge(width=.4),width=.2,orientation='y')+facet_wrap(~sex)+theme_bw(base_size=11)+theme(legend.position='bottom')+labs(title='BCT: age/height-adjusted race/ethnicity marginal means',subtitle='Common sex-specific US 2013-2014 age/height distribution; no subgroup recalibration',x='Adjusted mean Z (95% CI)',y=NULL)
+ggsave('adjusted_race_BCT.png',p,width=12,height=6,dpi=180,bg='white')
+orig<-read.csv(file.path(base,'HGS_performance_profile_20260911','performance_profile.csv'));stopifnot(isTRUE(all.equal(pf[,names(orig)],orig,check.attributes=FALSE)),nrow(ar)==60,nrow(l)==162,!anyNA(pf),identical(unname(tools::md5sum(inputs)),hashes))
+wc(data.frame(check=c('Original seven profile dimensions unchanged','Only saved OOF scores used for new source-age metrics','60 race marginal means from 12 diagnostic regressions','Same-sex pooled held-out target distribution for all race counterfactual predictions','No source scores or calibration parameters changed'),pass=TRUE),'integrity_checks')
+writeLines(c('Race diagnostic model: svyglm Z ~ race + ns(age,4) + ns(height,3), separately by sex, existing method and calibration. No HGS model fit or subgroup recalibration.',
+'Adjusted mean: replace race with each category for every same-sex eligible held-out US participant; keep age and height unchanged; average model matrix with MEC weights. SE from contrast covariance, t interval with model residual df. Empirical target covariate distribution treated fixed; prior reference/calibration parameter uncertainty excluded.',
+'No race interactions, no causal interpretation. Broad self-reported race/ethnicity is not genetic ancestry. Marginal adjustment relies on additive spline model and support; not proof that all confounding is removed.',
+'Profile A uses saved two-repeat PSU OOF scores; absolute age slope and age-group tail ranges calculated separately then averaged. B/C reuse existing age diagnostics. P5 age range included in CSV only.',
+'Original seven metrics preserved. A/B and C use different reference training years; C uniformly location+scale. No composite score or post-hoc best-level selection.'),'analysis_notes.txt')
+cat('BOTH LOW-COST ANALYSES COMPLETE\n')

@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use this software and its analysis resources, please cite the versioned release."
+title: "Handgrip-strength normalization and transportability: reproducibility archive"
+type: software
+version: 1.0.0
+date-released: 2026-09-17
+license: MIT
+repository-code: "https://github.com/xukaifs/hgs-transportability"
+url: "https://github.com/xukaifs/hgs-transportability"
+keywords:
+  - handgrip strength
+  - normalization
+  - transportability
+  - calibration
+  - GAMLSS
+  - KNHANES
+  - NHANES
+authors:
+  - family-names: Sun
+    given-names: Xiaoqing
+    affiliation: "Department of Radiology, Qingdao Municipal Hospital (Qingdao Hospital of University of Health and Rehabilitation Sciences), Qingdao, China"
+    orcid: "https://orcid.org/0009-0009-5782-9024"
+  - family-names: Han
+    given-names: Taoyang
+    affiliation: "Science and Information College, Qingdao Agricultural University, Qingdao, China"
+    orcid: "https://orcid.org/0009-0005-4785-8148"
+  - family-names: Xu
+    given-names: Kai
+    affiliation: "Department of Radiology, Qingdao Municipal Hospital (Qingdao Hospital of University of Health and Rehabilitation Sciences), Qingdao, China"
+    email: "xukaifs@163.com"
+    orcid: "https://orcid.org/0000-0002-4654-1780"
